@@ -7,17 +7,17 @@ import (
 )
 
 const (
-	charHeight = 8
-	linesPerChar = charHeight + 1
+	charHeight     = 8
+	linesPerChar   = charHeight + 1
 	firstPrintable = 32
-	lastPrintable = 126
-	newlineToken = `\n`
+	lastPrintable  = 126
+	newlineToken   = `\n`
 )
 
 func printAscii(text string, banner []string) error {
 	for _, ch := range text {
 		if ch < firstPrintable || ch > lastPrintable {
-			return fmt.Errorf("character %q is not a printable ASCII character", ch,)
+			return fmt.Errorf("character %q is not a printable ASCII character", ch)
 		}
 	}
 	for row := 0; row < charHeight; row++ {
