@@ -11,34 +11,26 @@ const (
 	linesPerChar   = charHeight + 1
 	firstPrintable = 32
 	lastPrintable  = 126
-	newlineToken   = `\n`
 )
 
-func printAscii(text string, banner []string) error {
-	for _, ch := range text {
-		if ch < firstPrintable || ch > lastPrintable {
-			return fmt.Errorf("character %q is not a printable ASCII character", ch)
-		}
+func main() {
+	err := run()
+
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
 	}
-	for row := 0; row < charHeight; row++ {
-		for _, ch := range text {
-			index := (int(ch)-firstPrintable)*linesPerChar + row
-			fmt.Print(banner[index])
-		}
-		fmt.Println()
-	}
-	return nil
 }
 
-func main() {
+func run() error {
 	if len(os.Args) < 2 || len(os.Args) > 3 {
-		fmt.Println("Usage: go run . <string> [standard|shadow|thinkertoy]")
-		return
+		return fmt.Errorf("usage: go run . <string> [standard|shadow|thinkertoy]")
 	}
 
 	input := os.Args[1]
+
 	if input == "" {
-		return
+		return nil
 	}
 
 	bannerStyle := ""
@@ -48,36 +40,17 @@ func main() {
 
 	filename, err := bannerFilename(bannerStyle)
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		return err
 	}
 
-	data, err := os.ReadFile(filename)
+	banner, err := loadBanner(filename)
 	if err != nil {
-		fmt.Println("Error: could not open banner file:", filename)
-		return
+		return err
 	}
 
-	content := strings.ReplaceAll(string(data), "\r\n", "\n")
-	banner := strings.Split(strings.Trim(content, "\n"), "\n")
+	input = strings.ReplaceAll(input, `\n`, "\n")
 
-	input = strings.ReplaceAll(input, newlineToken, "\n")
-
-	if input == "\n" {
-		fmt.Println()
-		return
-	}
-
-	for _, line := range strings.Split(input, "\n") {
-		if line == "" {
-			fmt.Println()
-			continue
-		}
-		if err := printAscii(line, banner); err != nil {
-			fmt.Fprintln(os.Stderr, "Error:", err)
-			os.Exit(1)
-		}
-	}
+	return render(input, banner)
 }
 
 func bannerFilename(style string) (string, error) {
@@ -91,4 +64,59 @@ func bannerFilename(style string) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown banner style %q (expected standard, shadow or thinkertoy)", style)
 	}
+}
+
+func loadBanner(filename string) ([]string, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("could not open banner file %s: %s", filename, err)
+	}
+
+	content := strings.ReplaceAll(string(data), "\r\n", "\n")
+	banner := strings.Split(strings.Trim(content, "\n"), "\n")
+
+	return banner, nil
+}
+
+func render(input string, banner []string) error {
+	if input == "\n" {
+		fmt.Println()
+		return nil
+	}
+
+	for _, line := range strings.Split(input, "\n") {
+		if line == "" {
+			fmt.Println()
+			continue
+		}
+
+		err := printAscii(line, banner)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func printAscii(text string, banner []string) error {
+	for _, ch := range text {
+		if ch < firstPrintable || ch > lastPrintable {
+			return fmt.Errorf("character %q is not a printable ASCII character", ch)
+		}
+	}
+
+	var builder strings.Builder
+
+	for row := 0; row < charHeight; row++ {
+		builder.Reset()
+		for _, ch := range text {
+			index := (int(ch)-firstPrintable)*linesPerChar + row
+			builder.WriteString(banner[index])
+		}
+		fmt.Println(builder.String())
+	}
+
+	return nil
 }

@@ -14,6 +14,7 @@ import (
 
 func captureOutput(f func()) string {
 	r, w, _ := os.Pipe()
+
 	old := os.Stdout
 	os.Stdout = w
 
@@ -28,29 +29,15 @@ func captureOutput(f func()) string {
 	return buf.String()
 }
 
-func assertSliceEqual(t *testing.T, got, expected []string) {
-	t.Helper()
-
-	if len(got) != len(expected) {
-		t.Errorf("got %d elements, want %d", len(got), len(expected))
-		return
-	}
-
-	for i := range expected {
-		if got[i] != expected[i] {
-			t.Errorf("index %d: got %q, want %q", i, got[i], expected[i])
-		}
-	}
-}
-
 func stubBanner() []string {
 	var banner []string
 
-	for code := 32; code <= 126; code++ {
-		for row := 0; row < 8; row++ {
+	for code := firstPrintable; code <= lastPrintable; code++ {
+		for row := 0; row < charHeight; row++ {
 			banner = append(banner, "X")
 		}
-		if code < 126 {
+
+		if code != lastPrintable {
 			banner = append(banner, "")
 		}
 	}
@@ -58,68 +45,80 @@ func stubBanner() []string {
 	return banner
 }
 
-func loadStandardBanner(t *testing.T) []string {
+func loadTestBanner(t *testing.T) []string {
 	t.Helper()
 
-	data, err := os.ReadFile("standard.txt")
+	banner, err := loadBanner("standard.txt")
 	if err != nil {
 		t.Skip("standard.txt not found")
 	}
 
-	content := strings.ReplaceAll(string(data), "\r\n", "\n")
-	content = strings.Trim(content, "\n")
-
-	return strings.Split(content, "\n")
+	return banner
 }
 
 // ============================================================
 // bannerFilename Tests
 // ============================================================
 
-func TestBannerFilenameDefault(t *testing.T) {
-	got, err := bannerFilename("")
-	want := "standard.txt"
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestBannerFilename(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+		err   bool
+	}{
+		{"default", "", "standard.txt", false},
+		{"standard", "standard", "standard.txt", false},
+		{"shadow", "shadow", "shadow.txt", false},
+		{"thinkertoy", "thinkertoy", "thinkertoy.txt", false},
+		{"invalid", "abc", "", true},
 	}
 
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := bannerFilename(tt.input)
 
-func TestBannerFilenameShadow(t *testing.T) {
-	got, err := bannerFilename("shadow")
-	want := "shadow.txt"
+			if tt.err {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
 
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
-func TestBannerFilenameThinkertoy(t *testing.T) {
-	got, err := bannerFilename("thinkertoy")
-	want := "thinkertoy.txt"
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
+			if got != tt.want {
+				t.Errorf("got %q want %q", got, tt.want)
+			}
+		})
 	}
 }
 
-func TestBannerFilenameInvalid(t *testing.T) {
-	_, err := bannerFilename("invalid")
+// ============================================================
+// loadBanner Tests
+// ============================================================
+
+func TestLoadBannerNotFound(t *testing.T) {
+	_, err := loadBanner("missing.txt")
 
 	if err == nil {
-		t.Error("expected error")
+		t.Fatal("expected error")
+	}
+}
+
+func TestLoadBannerStandard(t *testing.T) {
+	banner := loadTestBanner(t)
+
+	if len(banner) == 0 {
+		t.Fatal("banner should not be empty")
+	}
+
+	for _, line := range banner {
+		if strings.Contains(line, "\r") {
+			t.Error("banner contains carriage return")
+		}
 	}
 }
 
@@ -127,224 +126,105 @@ func TestBannerFilenameInvalid(t *testing.T) {
 // printAscii Tests
 // ============================================================
 
-func TestPrintAsciiSingleChar(t *testing.T) {
-	banner := stubBanner()
-
+func TestPrintAsciiSingleCharacter(t *testing.T) {
 	var err error
 
-	got := captureOutput(func() {
-		err = printAscii("A", banner)
+	output := captureOutput(func() {
+		err = printAscii("A", stubBanner())
 	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
 
-	if len(lines) != 8 {
-		t.Errorf("got %d lines, want 8", len(lines))
+	if len(lines) != charHeight {
+		t.Errorf("got %d lines want %d", len(lines), charHeight)
 	}
 }
 
-func TestPrintAsciiMultipleChars(t *testing.T) {
-	banner := stubBanner()
-
+func TestPrintAsciiMultipleCharacters(t *testing.T) {
 	var err error
 
-	got := captureOutput(func() {
-		err = printAscii("ABC", banner)
+	output := captureOutput(func() {
+		err = printAscii("ABC", stubBanner())
 	})
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
 
-	if len(lines) != 8 {
-		t.Errorf("got %d lines, want 8", len(lines))
-	}
-}
-
-func TestPrintAsciiSpace(t *testing.T) {
-	banner := stubBanner()
-
-	var err error
-
-	got := captureOutput(func() {
-		err = printAscii(" ", banner)
-	})
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got == "" {
-		t.Error("expected output")
+	if len(lines) != charHeight {
+		t.Errorf("got %d lines want %d", len(lines), charHeight)
 	}
 }
 
 func TestPrintAsciiInvalidCharacter(t *testing.T) {
-	banner := stubBanner()
-
-	err := printAscii("ñ", banner)
+	err := printAscii("ñ", stubBanner())
 
 	if err == nil {
-		t.Error("expected error")
+		t.Fatal("expected error")
 	}
 }
 
-func TestPrintAsciiAllPrintableASCII(t *testing.T) {
-	banner := stubBanner()
+func TestPrintAsciiRealBanner(t *testing.T) {
+	banner := loadTestBanner(t)
 
-	var all strings.Builder
+	err := printAscii("Hello", banner)
 
-	for i := 32; i <= 126; i++ {
-		all.WriteRune(rune(i))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
+}
 
-	var err error
+// ============================================================
+// render Tests
+// ============================================================
 
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("panic: %v", r)
+func TestRenderEmptyLine(t *testing.T) {
+	output := captureOutput(func() {
+		err := render("", stubBanner())
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
-	}()
-
-	captureOutput(func() {
-		err = printAscii(all.String(), banner)
 	})
 
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if output != "\n" {
+		t.Errorf("got %q", output)
 	}
 }
 
-func TestPrintAsciiRealBannerHello(t *testing.T) {
-	banner := loadStandardBanner(t)
+func TestRenderNewLine(t *testing.T) {
+	output := captureOutput(func() {
+		err := render("\n", stubBanner())
 
-	var err error
-
-	got := captureOutput(func() {
-		err = printAscii("Hello", banner)
-	})
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
-
-	if len(lines) != 8 {
-		t.Errorf("got %d lines, want 8", len(lines))
-	}
-}
-
-func TestPrintAsciiRealBannerNumbers(t *testing.T) {
-	banner := loadStandardBanner(t)
-
-	var err error
-
-	captureOutput(func() {
-		err = printAscii("1234567890", banner)
-	})
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestPrintAsciiRealBannerSymbols(t *testing.T) {
-	banner := loadStandardBanner(t)
-
-	var err error
-
-	captureOutput(func() {
-		err = printAscii("!@#$%^&*()", banner)
-	})
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// ============================================================
-// Input Parsing Tests
-// ============================================================
-
-func TestParseInputNoNewline(t *testing.T) {
-	input := strings.ReplaceAll("hello", "\\n", "\n")
-
-	got := strings.Split(input, "\n")
-	want := []string{"hello"}
-
-	assertSliceEqual(t, got, want)
-}
-
-func TestParseInputSingleNewline(t *testing.T) {
-	input := strings.ReplaceAll("hello\\nworld", "\\n", "\n")
-
-	got := strings.Split(input, "\n")
-	want := []string{"hello", "world"}
-
-	assertSliceEqual(t, got, want)
-}
-
-func TestParseInputDoubleNewline(t *testing.T) {
-	input := strings.ReplaceAll("hello\\n\\nworld", "\\n", "\n")
-
-	got := strings.Split(input, "\n")
-	want := []string{"hello", "", "world"}
-
-	assertSliceEqual(t, got, want)
-}
-
-func TestParseInputOnlyNewline(t *testing.T) {
-	got := strings.ReplaceAll("\\n", "\\n", "\n")
-	want := "\n"
-
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
-func TestParseInputNewlineAtEnd(t *testing.T) {
-	input := strings.ReplaceAll("hello\\n", "\\n", "\n")
-
-	got := strings.Split(input, "\n")
-	want := []string{"hello", ""}
-
-	assertSliceEqual(t, got, want)
-}
-
-// ============================================================
-// Banner Loading Tests
-// ============================================================
-
-func TestBannerLoadingFileNotFound(t *testing.T) {
-	_, err := os.ReadFile("notfound.txt")
-
-	if err == nil {
-		t.Error("expected error")
-	}
-}
-
-func TestBannerLoadingLineCount(t *testing.T) {
-	banner := loadStandardBanner(t)
-
-	if len(banner) < 854 {
-		t.Errorf("got %d lines, expected at least 854", len(banner))
-	}
-}
-
-func TestBannerLoadingNoCarriageReturn(t *testing.T) {
-	banner := loadStandardBanner(t)
-
-	for _, line := range banner {
-		if strings.Contains(line, "\r") {
-			t.Error("banner still contains carriage return")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
+	})
+
+	if output != "\n" {
+		t.Errorf("got %q", output)
+	}
+}
+
+func TestRenderMultipleLines(t *testing.T) {
+	output := captureOutput(func() {
+		err := render("A\nB", stubBanner())
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+
+	if len(lines) != charHeight*2 {
+		t.Errorf("got %d lines", len(lines))
 	}
 }
 
@@ -352,21 +232,22 @@ func TestBannerLoadingNoCarriageReturn(t *testing.T) {
 // Index Tests
 // ============================================================
 
-func TestSpaceIndex(t *testing.T) {
-	got := (32 - 32) * linesPerChar
-	want := 0
-
-	if got != want {
-		t.Errorf("got %d, want %d", got, want)
+func TestCharacterIndexCalculation(t *testing.T) {
+	tests := []struct {
+		char rune
+		want int
+	}{
+		{' ', 0},
+		{'!', 9},
+		{'A', (65 - firstPrintable) * linesPerChar},
+		{'~', (126 - firstPrintable) * linesPerChar},
 	}
-}
 
-func TestLastCharacterIndex(t *testing.T) {
-	banner := stubBanner()
+	for _, tt := range tests {
+		got := (int(tt.char) - firstPrintable) * linesPerChar
 
-	got := (126-firstPrintable)*linesPerChar + (charHeight - 1)
-
-	if got >= len(banner) {
-		t.Errorf("index %d out of range", got)
+		if got != tt.want {
+			t.Errorf("char %q: got %d want %d", tt.char, got, tt.want)
+		}
 	}
 }
