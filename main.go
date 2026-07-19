@@ -73,18 +73,38 @@ func loadBanner(filename string) ([]string, error) {
 	}
 
 	content := strings.ReplaceAll(string(data), "\r\n", "\n")
+
+	expectedLines := (lastPrintable - firstPrintable + 1) * linesPerChar
+
+	actualLines := strings.Count(content, "\n")
+	if content != "" && content[len(content)-1] != '\n' {
+		actualLines++
+	}
+
+	if actualLines != expectedLines {
+		return nil, fmt.Errorf(
+			"invalid banner file %s: expected %d lines, got %d",
+			filename,
+			expectedLines,
+			actualLines,
+		)
+	}
+
 	banner := strings.Split(strings.Trim(content, "\n"), "\n")
 
 	return banner, nil
 }
 
 func render(input string, banner []string) error {
+
 	if input == "\n" {
 		fmt.Println()
 		return nil
 	}
 
-	for _, line := range strings.Split(input, "\n") {
+	lines := strings.Split(strings.TrimSuffix(input, "\n"), "\n")
+
+	for _, line := range lines {
 		if line == "" {
 			fmt.Println()
 			continue
