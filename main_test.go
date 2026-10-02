@@ -162,14 +162,6 @@ func TestPrintAsciiMultipleCharacters(t *testing.T) {
 	}
 }
 
-func TestPrintAsciiInvalidCharacter(t *testing.T) {
-	err := printAscii("ñ", stubBanner())
-
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
 func TestPrintAsciiRealBanner(t *testing.T) {
 	banner := loadTestBanner(t)
 

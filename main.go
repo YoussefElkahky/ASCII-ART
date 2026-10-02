@@ -8,13 +8,31 @@ import (
 
 const (
 	charHeight     = 8
-	linesPerChar   = charHeight + 1
+	linesPerChar   = charHeight + 1 // 8 lines per character + separator
 	firstPrintable = 32
 	lastPrintable  = 126
 )
 
 func main() {
-	err := run()
+
+	if len(os.Args) < 2 || len(os.Args) > 3 {
+		fmt.Fprintln(os.Stderr, "Error: usage: go run . <string> [standard|shadow|thinkertoy]")
+		os.Exit(1)
+	}
+
+	input := os.Args[1]
+
+	if input == "" {
+		return
+	}
+
+	bannerStyle := ""
+
+	if len(os.Args) == 3 {
+		bannerStyle = os.Args[2]
+	}
+
+	err := run(input, bannerStyle)
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
@@ -22,21 +40,7 @@ func main() {
 	}
 }
 
-func run() error {
-	if len(os.Args) < 2 || len(os.Args) > 3 {
-		return fmt.Errorf("usage: go run . <string> [standard|shadow|thinkertoy]")
-	}
-
-	input := os.Args[1]
-
-	if input == "" {
-		return nil
-	}
-
-	bannerStyle := ""
-	if len(os.Args) == 3 {
-		bannerStyle = os.Args[2]
-	}
+func run(input string, bannerStyle string) error {
 
 	filename, err := bannerFilename(bannerStyle)
 	if err != nil {
@@ -67,6 +71,7 @@ func bannerFilename(style string) (string, error) {
 }
 
 func loadBanner(filename string) ([]string, error) {
+
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("could not open banner file %s: %s", filename, err)
@@ -74,35 +79,40 @@ func loadBanner(filename string) ([]string, error) {
 
 	content := strings.ReplaceAll(string(data), "\r\n", "\n")
 
+	// (126 - 32 + 1) printable ASCII characters * 9 lines per character.
 	expectedLines := (lastPrintable - firstPrintable + 1) * linesPerChar
 
-	actualLines := strings.Count(content, "\n")
-	if content != "" && content[len(content)-1] != '\n' {
-		actualLines++
-	}
+	banner := strings.Split(strings.TrimPrefix(content, "\n"), "\n")
 
-	if actualLines != expectedLines {
+	if len(banner) != expectedLines {
 		return nil, fmt.Errorf(
 			"invalid banner file %s: expected %d lines, got %d",
 			filename,
 			expectedLines,
-			actualLines,
+			len(banner),
 		)
 	}
-
-	banner := strings.Split(strings.Trim(content, "\n"), "\n")
 
 	return banner, nil
 }
 
 func render(input string, banner []string) error {
 
-	if input == "\n" {
-		fmt.Println()
-		return nil
+	for _, ch := range input {
+		if ch == '\n' {
+			continue
+		}
+		if ch < firstPrintable || ch > lastPrintable {
+			return fmt.Errorf("unsupported character: %q", ch)
+		}
 	}
 
-	lines := strings.Split(strings.TrimSuffix(input, "\n"), "\n")
+	trimmed := input
+	if strings.Trim(input, "\n") == "" {
+		trimmed = strings.TrimSuffix(input, "\n")
+	}
+
+	lines := strings.Split(trimmed, "\n")
 
 	for _, line := range lines {
 		if line == "" {
@@ -121,11 +131,6 @@ func render(input string, banner []string) error {
 }
 
 func printAscii(text string, banner []string) error {
-	for _, ch := range text {
-		if ch < firstPrintable || ch > lastPrintable {
-			return fmt.Errorf("character %q is not a printable ASCII character", ch)
-		}
-	}
 
 	var builder strings.Builder
 
